@@ -1,0 +1,12 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    PapiAI\Symfony\Storage\DoctrineConversationStore:
+        arguments:
+            $tableName: 'papi_conversations'
+        lazy: true
+
+    PapiAI\Symfony\Queue\MessengerQueue:
+        lazy: true
