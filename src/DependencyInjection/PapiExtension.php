@@ -23,8 +23,23 @@ use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Reference;
 
+/**
+ * Processes the `papi` bundle configuration and registers services in the container.
+ *
+ * Reads provider definitions, conversation store settings, and middleware
+ * from the application config, then wires up the corresponding service
+ * definitions and aliases so PapiAI components are available for injection.
+ */
 class PapiExtension extends Extension
 {
+    /**
+     * Load and process the papi configuration, registering all required services.
+     *
+     * @param array<int, array<string, mixed>> $configs   Raw configuration arrays from config files
+     * @param ContainerBuilder                 $container The Symfony container builder
+     *
+     * @return void
+     */
     public function load(array $configs, ContainerBuilder $container): void
     {
         $configuration = new Configuration();

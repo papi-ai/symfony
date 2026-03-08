@@ -20,8 +20,24 @@ use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
+/**
+ * Symfony bundle that integrates PapiAI into Symfony applications.
+ *
+ * Registers AI provider services, conversation storage, and middleware
+ * through Symfony's dependency injection container. Activate this bundle
+ * to use PapiAI agents within a Symfony project.
+ */
 class PapiBundle extends AbstractBundle
 {
+    /**
+     * Load bundle-specific service definitions from the YAML configuration.
+     *
+     * @param array<string, mixed>  $config    Processed bundle configuration values
+     * @param ContainerConfigurator $container  Service configurator for importing definitions
+     * @param ContainerBuilder      $builder    The container builder instance
+     *
+     * @return void
+     */
     public function loadExtension(
         array $config,
         ContainerConfigurator $container,
@@ -30,6 +46,11 @@ class PapiBundle extends AbstractBundle
         $container->import('../config/services.yaml');
     }
 
+    /**
+     * Return the custom container extension that processes papi configuration.
+     *
+     * @return ExtensionInterface|null The PapiExtension instance
+     */
     public function getContainerExtension(): ?ExtensionInterface
     {
         return new PapiExtension();

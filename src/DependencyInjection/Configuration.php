@@ -17,8 +17,22 @@ namespace PapiAI\Symfony\DependencyInjection;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
+/**
+ * Defines the configuration tree for the `papi` bundle.
+ *
+ * Exposes settings for AI providers (driver class, API key, model),
+ * middleware pipeline, and conversation storage (file-based or Doctrine).
+ */
 class Configuration implements ConfigurationInterface
 {
+    /**
+     * Build and return the configuration tree for the papi bundle.
+     *
+     * Defines nodes for default_provider, providers map, middleware list,
+     * and conversation store settings (type and file path).
+     *
+     * @return TreeBuilder The fully configured tree builder
+     */
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder('papi');

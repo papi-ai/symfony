@@ -18,14 +18,39 @@ use Doctrine\DBAL\Connection;
 use PapiAI\Core\Contracts\ConversationStoreInterface;
 use PapiAI\Core\Conversation;
 
+/**
+ * Persists agent conversations to a relational database via Doctrine DBAL.
+ *
+ * Stores serialised conversation data as JSON in a configurable table,
+ * supporting insert-or-update semantics so conversations can be resumed
+ * across requests.
+ */
 class DoctrineConversationStore implements ConversationStoreInterface
 {
+    /**
+     * @param Connection $connection The Doctrine DBAL connection used for persistence
+     * @param string     $tableName  Database table name for storing conversations
+     */
     public function __construct(
         private readonly Connection $connection,
         private readonly string $tableName = 'papi_conversations',
     ) {
     }
 
+    /**
+     * Save or update a conversation in the database.
+     *
+     * Performs an upsert: inserts a new row if the conversation ID does not
+     * exist, or updates the existing row otherwise.
+     *
+     * @param string       $id           Unique conversation identifier
+     * @param Conversation $conversation The conversation to persist
+     *
+     * @return void
+     *
+     * @throws \JsonException          If the conversation data cannot be JSON-encoded
+     * @throws \Doctrine\DBAL\Exception If the database query fails
+     */
     public function save(string $id, Conversation $conversation): void
     {
         $data = json_encode($conversation->toArray(), JSON_THROW_ON_ERROR);
@@ -49,6 +74,18 @@ class DoctrineConversationStore implements ConversationStoreInterface
         }
     }
 
+    /**
+     * Load a previously saved conversation by its ID.
+     *
+     * Returns null if the conversation does not exist or if the stored
+     * data cannot be decoded into a valid conversation array.
+     *
+     * @param string $id Unique conversation identifier
+     *
+     * @return Conversation|null The restored conversation, or null if not found
+     *
+     * @throws \Doctrine\DBAL\Exception If the database query fails
+     */
     public function load(string $id): ?Conversation
     {
         $row = $this->connection->fetchAssociative(
@@ -69,6 +106,17 @@ class DoctrineConversationStore implements ConversationStoreInterface
         return Conversation::fromArray($data);
     }
 
+    /**
+     * Delete a conversation from the database.
+     *
+     * Silently succeeds if the conversation does not exist.
+     *
+     * @param string $id Unique conversation identifier to remove
+     *
+     * @return void
+     *
+     * @throws \Doctrine\DBAL\Exception If the database query fails
+     */
     public function delete(string $id): void
     {
         $this->connection->executeStatement(
@@ -77,6 +125,15 @@ class DoctrineConversationStore implements ConversationStoreInterface
         );
     }
 
+    /**
+     * List conversation IDs, ordered by most recently updated first.
+     *
+     * @param int $limit Maximum number of conversation IDs to return
+     *
+     * @return list<string> Conversation IDs sorted by last update descending
+     *
+     * @throws \Doctrine\DBAL\Exception If the database query fails
+     */
     public function list(int $limit = 50): array
     {
         $rows = $this->connection->fetchAllAssociative(
