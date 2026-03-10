@@ -15,9 +15,7 @@ declare(strict_types=1);
 namespace PapiAI\Symfony;
 
 use PapiAI\Symfony\DependencyInjection\PapiExtension;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
-use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
 /**
@@ -29,23 +27,6 @@ use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
  */
 class PapiBundle extends AbstractBundle
 {
-    /**
-     * Load bundle-specific service definitions from the YAML configuration.
-     *
-     * @param array<string, mixed>  $config    Processed bundle configuration values
-     * @param ContainerConfigurator $container  Service configurator for importing definitions
-     * @param ContainerBuilder      $builder    The container builder instance
-     *
-     * @return void
-     */
-    public function loadExtension(
-        array $config,
-        ContainerConfigurator $container,
-        ContainerBuilder $builder,
-    ): void {
-        $container->import('../config/services.yaml');
-    }
-
     /**
      * Return the custom container extension that processes papi configuration.
      *

@@ -22,5 +22,16 @@
                 <directory name="src" />
             </errorLevel>
         </MissingOverrideAttribute>
+        <UndefinedClass>
+            <errorLevel type="suppress">
+                <referencedClass name="Symfony\Component\Messenger\*" />
+                <referencedClass name="Doctrine\DBAL\*" />
+            </errorLevel>
+        </UndefinedClass>
+        <UndefinedDocblockClass>
+            <errorLevel type="suppress">
+                <referencedClass name="Doctrine\DBAL\*" />
+            </errorLevel>
+        </UndefinedDocblockClass>
     </issueHandlers>
 </psalm>

@@ -16,11 +16,15 @@ namespace PapiAI\Symfony\DependencyInjection;
 
 use PapiAI\Core\Contracts\ConversationStoreInterface;
 use PapiAI\Core\Contracts\ProviderInterface;
+use PapiAI\Core\Contracts\QueueInterface;
 use PapiAI\Core\Storage\FileConversationStore;
+use PapiAI\Symfony\Queue\MessengerQueue;
 use PapiAI\Symfony\Storage\DoctrineConversationStore;
+use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
+use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
 
 /**
@@ -35,18 +39,22 @@ class PapiExtension extends Extension
     /**
      * Load and process the papi configuration, registering all required services.
      *
-     * @param array<int, array<string, mixed>> $configs   Raw configuration arrays from config files
+     * @param array<array-key, array<array-key, mixed>> $configs   Raw configuration arrays from config files
      * @param ContainerBuilder                 $container The Symfony container builder
      *
      * @return void
      */
     public function load(array $configs, ContainerBuilder $container): void
     {
+        $loader = new YamlFileLoader($container, new FileLocator(__DIR__ . '/../../config'));
+        $loader->load('services.yaml');
+
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
 
         $this->registerProviders($config, $container);
         $this->registerConversationStore($config, $container);
+        $this->registerQueueAlias($container);
     }
 
     private function registerProviders(array $config, ContainerBuilder $container): void
@@ -58,7 +66,7 @@ class PapiExtension extends Extension
             $definition->setArgument('$apiKey', $providerConfig['api_key']);
 
             if ($providerConfig['model'] !== null) {
-                $definition->setArgument('$model', $providerConfig['model']);
+                $definition->setArgument('$defaultModel', $providerConfig['model']);
             }
 
             $serviceId = 'papi.provider.' . $name;
@@ -86,5 +94,12 @@ class PapiExtension extends Extension
 
         $container->setDefinition(ConversationStoreInterface::class, $definition);
         $container->setAlias('papi.conversation_store', ConversationStoreInterface::class);
+    }
+
+    private function registerQueueAlias(ContainerBuilder $container): void
+    {
+        if ($container->hasDefinition(MessengerQueue::class)) {
+            $container->setAlias(QueueInterface::class, MessengerQueue::class);
+        }
     }
 }

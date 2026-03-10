@@ -31,7 +31,7 @@ class Configuration implements ConfigurationInterface
      * Defines nodes for default_provider, providers map, middleware list,
      * and conversation store settings (type and file path).
      *
-     * @return TreeBuilder The fully configured tree builder
+     * @return TreeBuilder<'array'> The fully configured tree builder
      */
     public function getConfigTreeBuilder(): TreeBuilder
     {
