@@ -1,5 +1,7 @@
 # PapiAI Symfony Bundle
 
+[![CI](https://github.com/papi-ai/symfony/workflows/CI/badge.svg)](https://github.com/papi-ai/symfony/actions?query=workflow%3ACI) [![Latest Version](https://img.shields.io/packagist/v/papi-ai/symfony.svg)](https://packagist.org/packages/papi-ai/symfony) [![Total Downloads](https://img.shields.io/packagist/dt/papi-ai/symfony.svg)](https://packagist.org/packages/papi-ai/symfony) [![PHP Version](https://img.shields.io/packagist/php-v/papi-ai/symfony.svg)](https://packagist.org/packages/papi-ai/symfony) [![License](https://img.shields.io/packagist/l/papi-ai/symfony.svg)](https://packagist.org/packages/papi-ai/symfony)
+
 Symfony bridge for [PapiAI](https://github.com/papi-ai/papi-core) -- integrate AI agents into your Symfony application with full dependency injection, configuration, and service wiring.
 
 ## Installation
