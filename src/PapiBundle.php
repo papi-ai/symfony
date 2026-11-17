@@ -14,7 +14,10 @@ declare(strict_types=1);
 
 namespace PapiAI\Symfony;
 
+use PapiAI\Symfony\DependencyInjection\Compiler\MiddlewareServicesPass;
+use PapiAI\Symfony\DependencyInjection\Compiler\QueueWithoutBusPass;
 use PapiAI\Symfony\DependencyInjection\PapiExtension;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
@@ -27,6 +30,14 @@ use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
  */
 class PapiBundle extends AbstractBundle
 {
+    public function build(ContainerBuilder $container): void
+    {
+        parent::build($container);
+
+        $container->addCompilerPass(new QueueWithoutBusPass());
+        $container->addCompilerPass(new MiddlewareServicesPass());
+    }
+
     /**
      * Return the custom container extension that processes papi configuration.
      *

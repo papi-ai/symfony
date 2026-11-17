@@ -14,24 +14,18 @@ declare(strict_types=1);
 
 namespace PapiAI\Symfony\DependencyInjection;
 
+use InvalidArgumentException;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 /**
- * Defines the configuration tree for the `papi` bundle.
- *
- * Exposes settings for AI providers (driver class, API key, model),
- * middleware pipeline, and conversation storage (file-based or Doctrine).
+ * The `papi` configuration: providers (each entry is the settings its factory takes), the agent,
+ * its middleware, conversation storage and where queued job statuses are kept.
  */
 class Configuration implements ConfigurationInterface
 {
     /**
-     * Build and return the configuration tree for the papi bundle.
-     *
-     * Defines nodes for default_provider, providers map, middleware list,
-     * and conversation store settings (type and file path).
-     *
-     * @return TreeBuilder<'array'> The fully configured tree builder
+     * @return TreeBuilder<'array'>
      */
     public function getConfigTreeBuilder(): TreeBuilder
     {
@@ -39,30 +33,50 @@ class Configuration implements ConfigurationInterface
         $rootNode = $treeBuilder->getRootNode();
 
         $rootNode
+            ->validate()
+                ->always(static function (array $config): array {
+                    $config['default_provider'] ??= isset($config['providers']['openai']) ? 'openai' : (array_key_first($config['providers']) ?? 'openai');
+
+                    return $config;
+                })
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['providers'] !== [] && !isset($config['providers'][$config['default_provider']]))
+                ->then(static function (array $config): never {
+                    throw new InvalidArgumentException(sprintf(
+                        'The default provider "%s" has no entry under papi.providers. Configured: %s.',
+                        $config['default_provider'],
+                        implode(', ', array_map(static fn (string $name): string => '"' . $name . '"', array_keys($config['providers']))),
+                    ));
+                })
+            ->end()
             ->children()
                 ->scalarNode('default_provider')
-                    ->defaultValue('openai')
+                    ->defaultNull()
+                    ->info('The entry under "providers" that the agent and ProviderInterface use; openai when configured, otherwise the first')
                 ->end()
                 ->arrayNode('providers')
+                    ->info('Settings by provider name, as each provider\'s factory takes them (api_key, model, effort, ...)')
                     ->useAttributeAsKey('name')
                     ->arrayPrototype()
+                        ->ignoreExtraKeys(false)
                         ->children()
                             ->scalarNode('driver')
-                                ->isRequired()
-                                ->info('The provider driver class (e.g. PapiAI\\OpenAI\\OpenAIProvider)')
-                            ->end()
-                            ->scalarNode('api_key')
-                                ->isRequired()
-                            ->end()
-                            ->scalarNode('model')
-                                ->defaultNull()
+                                ->info('A provider factory class, for an entry named otherwise or a provider of your own')
                             ->end()
                         ->end()
                     ->end()
                 ->end()
+                ->arrayNode('agent')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->scalarNode('instructions')->defaultNull()->end()
+                        ->integerNode('max_tokens')->defaultNull()->end()
+                    ->end()
+                ->end()
                 ->arrayNode('middleware')
                     ->scalarPrototype()->end()
-                    ->info('List of middleware service IDs')
+                    ->info('Middleware service IDs; a class that is not a service is registered with autowiring')
                 ->end()
                 ->arrayNode('conversation')
                     ->addDefaultsIfNotSet()
@@ -74,6 +88,15 @@ class Configuration implements ConfigurationInterface
                         ->scalarNode('path')
                             ->defaultValue('%kernel.project_dir%/var/papi/conversations')
                             ->info('Path for file-based conversation store')
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('queue')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->scalarNode('status_pool')
+                            ->defaultValue('cache.app')
+                            ->info('Cache pool that keeps queued job statuses; share it between web and workers')
                         ->end()
                     ->end()
                 ->end()
