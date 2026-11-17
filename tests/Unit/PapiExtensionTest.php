@@ -12,183 +12,130 @@
 
 declare(strict_types=1);
 
+use PapiAI\Core\Agent;
+use PapiAI\Core\Contracts\AgentInterface;
 use PapiAI\Core\Contracts\ConversationStoreInterface;
 use PapiAI\Core\Contracts\ProviderInterface;
+use PapiAI\Core\Contracts\QueueInterface;
+use PapiAI\Core\Exception\ConfigurationException;
+use PapiAI\Core\Role;
 use PapiAI\Core\Storage\FileConversationStore;
 use PapiAI\Symfony\DependencyInjection\PapiExtension;
 use PapiAI\Symfony\Storage\DoctrineConversationStore;
+use PapiAI\Symfony\Tests\Fixtures\RecordingMiddleware;
+use PapiAI\Symfony\Tests\Fixtures\TestProvider;
+use PapiAI\Symfony\Tests\Fixtures\TestProviderFactory;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 describe('PapiExtension', function () {
-    it('can be instantiated', function () {
-        $extension = new PapiExtension();
-
-        expect($extension)->toBeInstanceOf(PapiExtension::class);
-    });
-
     it('has the correct alias', function () {
-        $extension = new PapiExtension();
-
-        expect($extension->getAlias())->toBe('papi');
+        expect((new PapiExtension())->getAlias())->toBe('papi');
     });
 
-    it('registers file conversation store by default', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
+    it('builds each provider through its installed factory, with the settings it was given', function () {
+        $container = compiledContainer([
+            'default_provider' => 'test',
+            'providers' => ['test' => ['api_key' => 'k', 'model' => 'm']],
+        ]);
 
-        $extension->load([
-            [
-                'providers' => [],
-            ],
-        ], $container);
-
-        expect($container->hasDefinition(ConversationStoreInterface::class))->toBeTrue();
-
-        $definition = $container->getDefinition(ConversationStoreInterface::class);
-        expect($definition->getClass())->toBe(FileConversationStore::class);
+        expect($container->get('papi.provider.test')->settings)->toBe(['api_key' => 'k', 'model' => 'm']);
+        expect($container->get(ProviderInterface::class))->toBe($container->get('papi.provider.test'));
+        expect($container->get('papi.provider'))->toBe($container->get('papi.provider.test'));
     });
 
-    it('registers doctrine conversation store when configured', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
+    it('resolves environment variables in the settings when the provider is built', function () {
+        $_SERVER['PAPI_TEST_KEY'] = 'from-the-environment';
 
-        $extension->load([
-            [
-                'providers' => [],
-                'conversation' => [
-                    'store' => 'doctrine',
-                ],
-            ],
-        ], $container);
+        $container = compiledContainer([
+            'default_provider' => 'test',
+            'providers' => ['test' => ['api_key' => '%env(PAPI_TEST_KEY)%']],
+        ]);
 
-        expect($container->hasDefinition(ConversationStoreInterface::class))->toBeTrue();
+        expect($container->get('papi.provider.test')->settings)->toBe(['api_key' => 'from-the-environment']);
 
-        $definition = $container->getDefinition(ConversationStoreInterface::class);
-        expect($definition->getClass())->toBe(DoctrineConversationStore::class);
+        unset($_SERVER['PAPI_TEST_KEY']);
     });
 
-    it('registers provider services', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
-
-        $extension->load([
-            [
-                'providers' => [
-                    'openai' => [
-                        'driver' => 'PapiAI\\OpenAI\\OpenAIProvider',
-                        'api_key' => 'sk-test',
-                        'model' => 'gpt-4o',
-                    ],
-                ],
+    it('builds an entry of its own name through the driver it names', function () {
+        $container = compiledContainer([
+            'default_provider' => 'fast',
+            'providers' => [
+                'fast' => ['driver' => TestProviderFactory::class, 'api_key' => 'k', 'model' => 'small'],
+                'smart' => ['driver' => TestProviderFactory::class, 'api_key' => 'k', 'model' => 'large'],
             ],
-        ], $container);
+        ]);
 
-        expect($container->hasDefinition('papi.provider.openai'))->toBeTrue();
-
-        $definition = $container->getDefinition('papi.provider.openai');
-        expect($definition->getClass())->toBe('PapiAI\\OpenAI\\OpenAIProvider');
-        expect($definition->getArgument('$apiKey'))->toBe('sk-test');
-        expect($definition->getArgument('$defaultModel'))->toBe('gpt-4o');
+        expect($container->get('papi.provider.fast')->settings['model'])->toBe('small');
+        expect($container->get('papi.provider.smart')->settings['model'])->toBe('large');
     });
 
-    it('registers default provider alias', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
+    it('reads a provider class given as the driver as the factory beside it', function () {
+        $container = compiledContainer([
+            'default_provider' => 'fast',
+            'providers' => ['fast' => ['driver' => TestProvider::class, 'api_key' => 'k']],
+        ]);
 
-        $extension->load([
-            [
-                'default_provider' => 'openai',
-                'providers' => [
-                    'openai' => [
-                        'driver' => 'PapiAI\\OpenAI\\OpenAIProvider',
-                        'api_key' => 'sk-test',
-                        'model' => null,
-                    ],
-                ],
-            ],
-        ], $container);
-
-        expect($container->hasAlias(ProviderInterface::class))->toBeTrue();
-        expect($container->hasAlias('papi.provider'))->toBeTrue();
+        expect($container->get('papi.provider.fast')->settings)->toBe(['api_key' => 'k']);
     });
 
-    it('does not set model argument when model is null', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
+    it('refuses a provider that is not installed', function () {
+        compiledContainer([
+            'default_provider' => 'gogle',
+            'providers' => ['gogle' => ['api_key' => 'k']],
+        ]);
+    })->throws(ConfigurationException::class, 'Provider "gogle" is not installed. Installed: "test".');
 
-        $extension->load([
-            [
-                'providers' => [
-                    'anthropic' => [
-                        'driver' => 'PapiAI\\Anthropic\\AnthropicProvider',
-                        'api_key' => 'sk-test',
-                        'model' => null,
-                    ],
-                ],
-            ],
-        ], $container);
+    it('refuses a driver that is not a provider factory', function () {
+        compiledContainer([
+            'default_provider' => 'test',
+            'providers' => ['test' => ['driver' => stdClass::class, 'api_key' => 'k']],
+        ]);
+    })->throws(ConfigurationException::class, 'Provider "test" names the driver "stdClass", which is not a provider factory and has no "stdClassFactory" beside it.');
 
-        $definition = $container->getDefinition('papi.provider.anthropic');
+    it('compiles without Doctrine or Messenger', function () {
+        $container = compiledContainer([
+            'default_provider' => 'test',
+            'providers' => ['test' => ['api_key' => 'k']],
+        ]);
 
-        expect(fn () => $definition->getArgument('$defaultModel'))
-            ->toThrow(\OutOfBoundsException::class);
+        expect($container->get(ConversationStoreInterface::class))->toBeInstanceOf(FileConversationStore::class);
+        expect($container->has(QueueInterface::class))->toBeFalse();
     });
 
-    it('registers multiple providers', function () {
-        $extension = new PapiExtension();
+    it('stores conversations with Doctrine when asked', function () {
         $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
-        $extension->load([
-            [
-                'default_provider' => 'openai',
-                'providers' => [
-                    'openai' => [
-                        'driver' => 'PapiAI\\OpenAI\\OpenAIProvider',
-                        'api_key' => 'sk-openai',
-                        'model' => 'gpt-4o',
-                    ],
-                    'anthropic' => [
-                        'driver' => 'PapiAI\\Anthropic\\AnthropicProvider',
-                        'api_key' => 'sk-anthropic',
-                        'model' => 'claude-sonnet-4-20250514',
-                    ],
-                ],
-            ],
-        ], $container);
+        (new PapiExtension())->load([['conversation' => ['store' => 'doctrine']]], $container);
 
-        expect($container->hasDefinition('papi.provider.openai'))->toBeTrue();
-        expect($container->hasDefinition('papi.provider.anthropic'))->toBeTrue();
-
-        // Only openai should be aliased as default
-        $alias = $container->getAlias(ProviderInterface::class);
-        expect((string) $alias)->toBe('papi.provider.openai');
-    });
-
-    it('registers conversation store alias', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
-
-        $extension->load([
-            [
-                'providers' => [],
-            ],
-        ], $container);
-
+        expect($container->getDefinition(ConversationStoreInterface::class)->getClass())->toBe(DoctrineConversationStore::class);
         expect($container->hasAlias('papi.conversation_store'))->toBeTrue();
     });
 
-    it('loads services yaml configuration', function () {
-        $extension = new PapiExtension();
-        $container = new ContainerBuilder();
+    it('gives the agent the default provider, its instructions, output ceiling and middleware', function () {
+        $container = compiledContainer([
+            'default_provider' => 'test',
+            'providers' => ['test' => ['api_key' => 'k']],
+            'agent' => ['instructions' => 'Answer in one word.', 'max_tokens' => 512],
+            'middleware' => [RecordingMiddleware::class],
+        ]);
 
-        $extension->load([
-            [
-                'providers' => [],
-            ],
-        ], $container);
+        $container->get(AgentInterface::class)->run('Capital of Portugal?');
 
-        // The services.yaml defines MessengerQueue and DoctrineConversationStore
-        expect($container->hasDefinition('PapiAI\\Symfony\\Queue\\MessengerQueue'))->toBeTrue();
-        expect($container->hasDefinition('PapiAI\\Symfony\\Storage\\DoctrineConversationStore'))->toBeTrue();
+        $provider = $container->get('papi.provider.test');
+        expect($provider->lastOptions['maxTokens'])->toBe(512);
+        expect($provider->lastOptions)->not->toHaveKey('model');
+        expect($provider->lastMessages[0]->role)->toBe(Role::System);
+        expect($provider->lastMessages[0]->content)->toBe('Answer in one word.');
+        expect($container->get(RecordingMiddleware::class)->prompts)->toBe(['Capital of Portugal?']);
+        expect($container->get(Agent::class))->toBe($container->get(AgentInterface::class));
+        expect($container->get('papi.agent'))->toBe($container->get(AgentInterface::class));
+    });
+
+    it('registers no agent when no provider is configured', function () {
+        $container = compiledContainer([]);
+
+        expect($container->has(AgentInterface::class))->toBeFalse();
+        expect($container->has(ProviderInterface::class))->toBeFalse();
     });
 });

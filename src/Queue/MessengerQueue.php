@@ -17,69 +17,34 @@ namespace PapiAI\Symfony\Queue;
 use PapiAI\Core\AgentJob;
 use PapiAI\Core\Contracts\QueueInterface;
 use PapiAI\Core\JobStatus;
-use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\Messenger\Stamp\TransportMessageIdStamp;
 
 /**
- * Dispatches agent jobs asynchronously via Symfony Messenger.
+ * Queues agent jobs on a Symfony Messenger bus.
  *
- * Wraps the Messenger message bus to enqueue AgentJob instances for
- * background processing, allowing long-running AI agent tasks to
- * execute outside the HTTP request cycle.
+ * Each job travels as a RunAgentJob message, which RunAgentJobHandler runs; route that message
+ * to an async transport to run it in a worker. Statuses are kept in JobStatuses, whose pool the
+ * web process and the workers must share.
  */
 class MessengerQueue implements QueueInterface
 {
-    /**
-     * @param MessageBusInterface $bus The Symfony Messenger bus used to dispatch jobs
-     */
     public function __construct(
         private readonly MessageBusInterface $bus,
+        private readonly JobStatuses $statuses = new JobStatuses(),
     ) {
     }
 
-    /**
-     * Dispatch an agent job onto the Messenger bus for asynchronous processing.
-     *
-     * Generates a unique 32-character hex job ID, attaches it as a transport
-     * stamp, and dispatches the job through the message bus.
-     *
-     * @param AgentJob $job The agent job to enqueue
-     *
-     * @return string The generated job ID for later status tracking
-     */
     public function dispatch(AgentJob $job): string
     {
         $jobId = bin2hex(random_bytes(16));
-
-        $envelope = new Envelope($job, [
-            new TransportMessageIdStamp($jobId),
-        ]);
-
-        $this->bus->dispatch($envelope);
+        $this->statuses->record(new JobStatus($jobId, JobStatus::PENDING));
+        $this->bus->dispatch(new RunAgentJob($jobId, $job));
 
         return $jobId;
     }
 
-    /**
-     * Retrieve the current status of a dispatched job.
-     *
-     * Note: This is a basic implementation that always returns PENDING,
-     * since Symfony Messenger does not natively track job status. Override
-     * or extend this with a database-backed status store for production use.
-     *
-     * @param string $jobId The job ID returned by dispatch()
-     *
-     * @return JobStatus The current status of the job (always PENDING in this implementation)
-     */
     public function status(string $jobId): JobStatus
     {
-        // Basic implementation — Messenger does not natively track job status.
-        // In a production setup, you would store job status in a database
-        // or use a transport that supports status tracking.
-        return new JobStatus(
-            jobId: $jobId,
-            status: JobStatus::PENDING,
-        );
+        return $this->statuses->of($jobId);
     }
 }
